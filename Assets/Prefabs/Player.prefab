@@ -81,6 +81,7 @@ GameObject:
   - component: {fileID: 6282861164598930659}
   - component: {fileID: 9075726510146889408}
   - component: {fileID: 6350877533106770455}
+  - component: {fileID: 2018066779971445702}
   - component: {fileID: -1137706731022682662}
   - component: {fileID: 3242596061903917940}
   - component: {fileID: -7114350614607204048}
@@ -232,6 +233,19 @@ MonoBehaviour:
   jumpForce: 5
   rotationSpeed: 1000
   groundCheck: {fileID: 8657265840224554241}
+--- !u!114 &2018066779971445702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4737140702757488742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b84f39f9a2a2e93449f8090950d4c630, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCustomizeController
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &-1137706731022682662
 MonoBehaviour:
   m_ObjectHideFlags: 0
