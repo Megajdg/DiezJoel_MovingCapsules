@@ -20,11 +20,23 @@ public class PlayerController : NetworkBehaviour
     // Referencia al componente de Audio
     private AudioSource jumpSound;
 
+    private float knockbackTimer;
+
+    [SerializeField] private GameObject bulletPrefab;
+    [SerializeField] private Transform bulletSpawnPoint;
+    [SerializeField] private Transform shellSpawnPoint;
+
+    [SerializeField] private float fireRate = 0.5f; // medio segundo entre disparos
+    private float nextFireTime;
+
+    private PlayerCustomizeController playerCustomizeController;
+
     private void Awake()
     {
         // Asignación de referencia al componente de físicas y de audio
         rb = GetComponent<Rigidbody>();
         jumpSound = GetComponent<AudioSource>();
+        playerCustomizeController = GetComponent<PlayerCustomizeController>();
     }
 
     public override void OnNetworkSpawn()
@@ -59,6 +71,12 @@ public class PlayerController : NetworkBehaviour
             if (Keyboard.current.wKey.IsPressed() || Keyboard.current.upArrowKey.IsPressed()) v += 1f;
             // Solicitamos saltar al Servidor
             if (Keyboard.current.spaceKey.wasPressedThisFrame && groundCheck.isGrounded) SubmitJumpServerRpc();
+            // Solicitamos disparar al Servidor
+            if (Keyboard.current.fKey.isPressed && Time.time >= nextFireTime && !playerCustomizeController.reloading)
+            {
+                nextFireTime = Time.time + fireRate;
+                SubmitShootServerRpc();
+            }
         }
 
         Vector2 input = new Vector2(h, v).normalized;
@@ -71,6 +89,12 @@ public class PlayerController : NetworkBehaviour
     {
         // REGLA DE ORO DE NETCODE: Solo el SERVIDOR calcula y aplica cambios de físicas autoritativos.
         if (!IsServer) return;
+
+        if (knockbackTimer > 0)
+        {
+            knockbackTimer -= Time.fixedDeltaTime;
+            return;
+        }
 
         // 3. Aplicar la velocidad en el Servidor usando Rigidbody
         Vector3 moveDirection = new Vector3(inputVector.x, 0f, inputVector.y);
@@ -98,6 +122,12 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    public void ApplyKnockback(Vector3 force)
+    {
+        rb.linearVelocity = force;
+        knockbackTimer = 0.3f;
+    }
+
     /// <summary>
     /// ServerRpc: Método ejecutado EXCLUSIVAMENTE en el SERVIDOR tras ser invocado por el CLIENTE.
     /// El sufijo 'ServerRpc' y el atributo [ServerRpc] son obligatorios en Unity Netcode for GameObjects.
@@ -109,7 +139,6 @@ public class PlayerController : NetworkBehaviour
         inputVector = input;
     }
 
-
     [ServerRpc]
     private void SubmitJumpServerRpc()
     {
@@ -117,10 +146,34 @@ public class PlayerController : NetworkBehaviour
         jumpInput = true;
     }
 
+    [ServerRpc]
+    private void SubmitShootServerRpc()
+    {
+        GameObject projectile = Instantiate(bulletPrefab, bulletSpawnPoint.position, bulletSpawnPoint.rotation);
+
+        SendBulletParticlesClientRpc();
+
+        projectile.GetComponent<NetworkObject>().Spawn();
+
+        Rigidbody rb = projectile.GetComponent<Rigidbody>();
+
+        rb.linearVelocity = bulletSpawnPoint.forward * 15f;
+
+        playerCustomizeController.ConsumeAmmoVisualClientRpc();
+    }
+
     [ClientRpc]
     private void SendJumpSoundClientRpc()
     {
         // El Servidor manda a todos los clientes el sonido de salto del cliente que ha saltado
         jumpSound.Play();
+    }
+
+    [ClientRpc]
+    private void SendBulletParticlesClientRpc()
+    {
+        ParticleManager.instance.SpawnParticles("BulletShells", shellSpawnPoint);
+        ParticleManager.instance.SpawnParticles("MainShootingImpact", bulletSpawnPoint);
+        ParticleManager.instance.SpawnParticles("ShootingImpact", bulletSpawnPoint.position, bulletSpawnPoint.rotation);
     }
 }
