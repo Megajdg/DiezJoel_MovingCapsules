@@ -31,6 +31,16 @@ public class PlayerController : NetworkBehaviour
 
     private PlayerCustomizeController playerCustomizeController;
 
+    [SerializeField] private Transform holdPoint;
+
+    [SerializeField] private float grabDistance = 2f;
+
+    [SerializeField] private float throwForce = 10f;
+
+    private NetworkGrabbable nearbyObject;
+
+    private NetworkGrabbable heldObject;
+
     private void Awake()
     {
         // Asignación de referencia al componente de físicas y de audio
@@ -58,6 +68,8 @@ public class PlayerController : NetworkBehaviour
         // REGLA DE ORO DE NETCODE: Solo el cliente dueño (IsOwner) lee sus propias entradas del teclado.
         if (!IsOwner) return;
 
+        CheckNearbyObjects();
+
         // 1. Lectura del Input local en el Cliente Dueño
 
         float h = 0f;
@@ -76,6 +88,25 @@ public class PlayerController : NetworkBehaviour
             {
                 nextFireTime = Time.time + fireRate;
                 SubmitShootServerRpc();
+            }
+
+            if (Keyboard.current.eKey.wasPressedThisFrame)
+            {
+                if (heldObject == null)
+                {
+                    if (nearbyObject != null)
+                    {
+                        GrabObjectServerRpc(
+                            nearbyObject.NetworkObjectId
+                        );
+                    }
+                }
+                else
+                {
+                    ThrowObjectServerRpc(
+                        heldObject.NetworkObjectId
+                    );
+                }
             }
         }
 
@@ -175,5 +206,103 @@ public class PlayerController : NetworkBehaviour
         ParticleManager.instance.SpawnParticles("BulletShells", shellSpawnPoint);
         ParticleManager.instance.SpawnParticles("MainShootingImpact", bulletSpawnPoint);
         ParticleManager.instance.SpawnParticles("ShootingImpact", bulletSpawnPoint.position, bulletSpawnPoint.rotation);
+    }
+
+    private void CheckNearbyObjects()
+    {
+        if (nearbyObject != null)
+            nearbyObject.ShowPrompt(false);
+
+        nearbyObject = null;
+
+        Collider[] hits =
+            Physics.OverlapSphere(transform.position, grabDistance);
+
+        foreach (Collider hit in hits)
+        {
+            NetworkGrabbable grabbable =
+                hit.GetComponent<NetworkGrabbable>();
+
+            if (grabbable == null)
+                continue;
+
+            if (grabbable.IsGrabbed.Value)
+                continue;
+
+            nearbyObject = grabbable;
+            nearbyObject.ShowPrompt(true);
+
+            break;
+        }
+    }
+
+    [ServerRpc]
+    private void GrabObjectServerRpc(ulong objectId)
+    {
+        if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(objectId, out var obj))
+            return;
+
+        NetworkGrabbable grabbable = obj.GetComponent<NetworkGrabbable>();
+
+        if (grabbable == null)
+            return;
+
+        obj.TrySetParent(NetworkObject, false);
+
+        obj.transform.localPosition = holdPoint.localPosition;
+
+        grabbable.GrabClientRpc();
+
+        SetHeldObjectClientRpc(objectId);
+    }
+
+    [ClientRpc]
+    private void SetHeldObjectClientRpc(ulong objectId)
+    {
+        if (!IsOwner)
+            return;
+
+        if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(objectId, out var obj))
+            return;
+
+        heldObject = obj.GetComponent<NetworkGrabbable>();
+    }
+
+    [ServerRpc]
+    private void ThrowObjectServerRpc(
+    ulong objectId)
+    {
+        if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(objectId, out var obj))
+            return;
+
+        NetworkGrabbable grabbable = obj.GetComponent<NetworkGrabbable>();
+
+        if (grabbable == null)
+            return;
+
+        grabbable.Release();
+
+        Rigidbody rb = obj.GetComponent<Rigidbody>();
+
+        rb.AddForce(transform.forward * throwForce, ForceMode.Impulse);
+
+        ThrowObjectClientRpc(objectId);
+    }
+
+    [ClientRpc]
+    private void ThrowObjectClientRpc(ulong objectId)
+    {
+        if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(objectId, out var obj))
+            return;
+
+        NetworkGrabbable grabbable = obj.GetComponent<NetworkGrabbable>();
+
+        if (grabbable == null)
+            return;
+
+        grabbable.Release();
+
+        if (IsOwner)
+            heldObject = null;
     }
 }

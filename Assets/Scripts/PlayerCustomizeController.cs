@@ -70,10 +70,10 @@ public class PlayerCustomizeController : NetworkBehaviour
         if (IsServer)
         {
             playerName.Value = $"Jugador {OwnerClientId}";
+            playerAmmo.Value = ammoVisuals.Length;
             RandomizeColor();
         }
 
-        playerAmmo.Value = ammoVisuals.Length;
         playerAmmo.OnValueChanged += OnAmmoChanged;
         UpdateAmmoVisuals(playerAmmo.Value);
 
